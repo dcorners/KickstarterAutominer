@@ -1,0 +1,26 @@
+DebugScript: false
+FileName: r:\1\source\kickstarter.csv
+GoBackDays: 368
+GoalGroupCount: 10
+IncludeBlurb: true
+IncludeCancelled: false
+IncludeCountries:
+- US
+- CA
+IncludeLanguages:
+- en
+- fr
+IncludeLive: false
+IncludeName: true
+KeyWordsOne: covid | pandemic | disinfect | mask | sanitize
+KeyWordsTwo: 
+MaxGoal: 1000000
+MaxPledge: 1000000
+MinBackers: 0
+MinPledge: 0
+PledgedGroupCount: 10
+RecordCounter: false
+SourceDirectory: r:\1\source\
+TargetAllFileNameOnly: kickstarter_all.csv
+TargetDirectory: r:\1\output\
+TargetFileNameOnly: kickstarter_filtered.csv
