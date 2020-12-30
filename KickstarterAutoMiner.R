@@ -44,7 +44,7 @@ library(tidyr)
 options(scipen=999)
 # the "target" directory specified in the YAML file is actually the source for the analysis portion
 # the real target for this portion should be a charts directory off the TargetDirectory pulled from the YAML file.
-TargetDirectory <- "r:/1/output/"
+TargetDirectory <- "c:/1/output/"
 SourceDirectory <- TargetDirectory
 #TargetDirectory <- "d:/1/output/charts/"
 ChartsDirectory <- paste(TargetDirectory,"charts/",sep="")
@@ -59,10 +59,12 @@ PercentColor = "blue"
 nb.cols <- 999
 mycolors <- colorRampPalette(brewer.pal(8, "Dark2"))(nb.cols)
 
+
 # LOAD SOUCE FILES
 AllProjects <- read.csv(paste(SourceDirectory, TargetAllFileName, sep="" ,collapse=NULL), stringsAsFactors = T)
 #FilteredProjects <- read.csv(paste(SourceDirectory,"kickstarter_clean.csv", sep="" ,collapse=NULL))
 FilteredProjects <- read.csv(paste(SourceDirectory,TargetFileName, sep="" ,collapse=NULL), stringsAsFactors = T)
+ks.proj <- FilteredProjects
 FilteredProjects$ProjectDuration <- as.integer( sub('.*-([0-9]+).*','\\1',difftime(FilteredProjects$deadline,FilteredProjects$launched_at, units = "days")))
 CategoryGroupsFiltered <- read.csv(paste(SuccessGridsDirectory, paste(TargetFileNamestub,"_by_category_success.csv",sep="",collapse=NULL), sep="" ,collapse=NULL))
 SuccessAllProjects <- CategoryGroupsAll <- read.csv(paste(SourceDirectory,paste(TargetAllFileNamestub,"_projectsuccessb_Overall.csv", sep="" ,collapse=NULL), sep="" ,collapse=NULL), stringsAsFactor = T)
@@ -71,6 +73,38 @@ SuccessAllProjects <- CategoryGroupsAll <- read.csv(paste(SourceDirectory,paste(
 # CREATE DESTINATION DIRECTORIES
 dir.create(file.path(ChartsDirectory), showWarnings = FALSE)
 dir.create(file.path(ResultsDirectory), showWarnings = FALSE)
+
+# create day, month, year variables
+
+# give each project a unique ID and format dates as dates
+ks.proj$ID <- as.character(rownames(ks.proj))
+ks.proj$name <- as.character(ks.proj$name)
+ks.proj$deadline <- as.Date(ks.proj$deadline)
+ks.proj$launched <- as.Date(ks.proj$launched_at)
+
+# reformat project success
+ks.proj$projectsuccess <- as.character(ks.proj$projectsuccess )
+ks.proj$projectsuccess <- as.factor(ks.proj$projectsuccess )
+
+ks.proj <- ks.proj %>% 
+  separate(col = "deadline", into = c("deadline_year", "deadline_month", "deadline_day"), sep = "-") %>%
+  separate(col = "launched", into = c("launched_year", "launched_month", "launched_day"), sep = "-")
+
+ks.proj$launched_day <- as.numeric(ks.proj$launched_day)
+ks.proj$deadline_day <- as.numeric(ks.proj$deadline_day)
+
+
+summary(ks.proj$projectsuccess )
+
+FilteredProjects <- FilteredProjects %>%
+  separate(col = "deadline", into = c("deadline_year", "deadline_month", "deadline_day"), sep = "-") %>%
+  separate(col = "launched_at", into = c("launched_year", "launched_month", "launched_day"), sep = "-")
+
+FilteredProjects$launched_day <- as.numeric(FilteredProjects$launched_day)
+FilteredProjects$deadline_day <- as.numeric(FilteredProjects$deadline_day)
+
+
+
 
 
 # ANOVA ON PLEDGED TO DETERMINE NORMALITY and VARIANCE ASSUPMTIONS
@@ -119,6 +153,15 @@ aov_residuals <- residuals(object = categorypledgedanova )
 stcap <- capture.output(shapiro.test(x = aov_residuals[0:5000] ))
 writeLines(stcap, con=file(paste(ResultsDirectory,"CategoryPledgedFilteredshapiro.txt", sep="" ,collapse=NULL)))
 closeAllConnections()
+FilteredProjects5k <- FilteredProjects[0:4999,]
+FilteredProjects5k <- subset(FilteredProjects5k, backers_count > 1)
+FilteredProjects5k$logbackers <- log(FilteredProjects5k$backers_count)
+shapiro.test(FilteredProjects5k$goal)
+shapiro.test(FilteredProjects5k$pledged)
+shapiro.test(FilteredProjects5k$backers_count)
+FilteredProjects5k$logbackers <- log1p(FilteredProjects$backers_count)
+shapiro.test(FilteredProjects5k$logbackers)
+
 
 
 # CHARTS FOR CATEGORY
@@ -157,12 +200,21 @@ ggplot(data=CategoryGroupsFiltered, aes(x=category, y=MeanActualPledged, fill=ca
 dev.off()
 
 png(paste(ChartsDirectory,"BarChartFilteredMeanPledgedByCategory.png", sep="" ,collapse=NULL), width = 1500, height = 700)
-ggplot(data=CategoryGroupsFiltered, aes(x=category, y=MeanPledged, fill=category,colour=category)) +   geom_bar(stat="identity") + scale_color_manual(values = mycolors) + ggtitle("Pledged Amount (Mean) by Category - Filtered") + xlab("Category") + ylab("Mean Pledged Amount") + theme(plot.title = element_text(hjust = 0.5))+ geom_hline(yintercept = mean(CategoryGroupsFiltered$MeanActualPledged), color="blue")
-dev.off()
+ggplot(data=CategoryGroupsFiltered, aes(x=category, y=MeanPledged, fill=category,colour=category)) +  
+ geom_bar(stat="identity") + scale_color_manual(values = mycolors) + 
+ ggtitle("Pledged Amount (Mean) by Category - Filtered") + xlab("Category") + ylab("Mean Pledged Amount") + 
+ theme(plot.title = element_text(hjust = 0.5))+ geom_hline(yintercept = mean(FilteredProjects$pledged), color="blue")+
+  geom_text(aes(0,mean(FilteredProjects$pledged), label = paste('Mean Pledge: $',round(mean(FilteredProjects$pledged),digits=0),sep = "", collapse = NULL), hjust = -0.5, vjust = -1),color = "blue")
+  dev.off()
+
 
 png(paste(ChartsDirectory,"BarChartFilteredMedianPledgedByCategory.png", sep="" ,collapse=NULL), width = 1500, height = 700)
-ggplot(data=CategoryGroupsFiltered, aes(x=category, y=MedianPledged, fill=category,colour=category)) +   geom_bar(stat="identity") + scale_color_manual(values = mycolors) + ggtitle("Pledged Amount (Median) by Category - Filtered") + xlab("Category") + ylab("Median Pledged Amount") + theme(plot.title = element_text(hjust = 0.5))+ geom_hline(yintercept = mean(CategoryGroupsFiltered$MedianPledged), color="blue") + geom_text(aes(0,mean(CategoryGroupsFiltered$MedianPledged), label = paste('$',round(mean(CategoryGroupsFiltered$MedianPledged),digits=0),sep = "", collapse = NULL), hjust = -0.5, vjust = -1),color = "red")
-dev.off()
+ggplot(data=CategoryGroupsFiltered, aes(x=category, y=MedianPledged, fill=category,colour=category)) +  
+geom_bar(stat="identity") + scale_color_manual(values = mycolors) + 
+ggtitle("Pledged Amount (Median) by Category - Filtered") + xlab("Category") + ylab("Median Pledged Amount") +
+ theme(plot.title = element_text(hjust = 0.5))+ geom_hline(yintercept = mean(CategoryGroupsFiltered$MedianPledged), color="blue") + 
+ geom_text(aes(0,median(FilteredProjects$pledged), label = paste('Median Pledge: $',round(median(FilteredProjects$pledged),digits=0),sep = "", collapse = NULL), hjust = -0.5, vjust = 0.5),color = "blue")
+ dev.off()
 
 
 png(paste(ChartsDirectory,"BarChartAllSuccessByCategory.png", sep="" ,collapse=NULL), width = 1500, height = 700)
@@ -200,6 +252,16 @@ ggplot(FilteredProjects, aes(state, fill = state)) +
   ggtitle("Project State - Filtered")+
   theme(plot.title = element_text(hjust = 0.5))
   dev.off()
+  
+  png(paste(ChartsDirectory,"BarChartAllByState.png", sep="" ,collapse=NULL), width = 700, height = 500)
+ggplot(AllProjects, aes(state, fill = state)) +
+  geom_bar() +
+  ylab("# of Projects") + xlab("State") +
+  theme(legend.position = "bottom") +
+  ggtitle("Project State - Complete")+
+  theme(plot.title = element_text(hjust = 0.5))
+  dev.off()
+  
 
 png(paste(ChartsDirectory,"BarChartAllByState.png", sep="" ,collapse=NULL), width = 700, height = 500)
 ggplot(AllProjects, aes(state, fill = state)) +
@@ -364,7 +426,7 @@ TechnologygoalgroupFiltered$goalgroup.cat <- paste0('$',TechnologygoalgroupFilte
 png(paste(ChartsDirectory,"LineGraphTechFilteredSuccessVsGoalAmount.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(TechnologygoalgroupFiltered, aes(x=goalgroup, y=PercentSuccess)) +
 geom_point() +
-geom_smooth() +
+geom_smooth(se=F) +
 scale_x_discrete(name="Goal Amount", limits=TechnologygoalgroupFiltered$goalgroup.cat) +
 scale_y_continuous(name="Success Ratio") +
 ggtitle("Success By Goal Amount - Filtered - Technology Category")+ theme(plot.title = element_text(hjust = 0.5))
@@ -379,10 +441,20 @@ GoalGroupsAll <- read.csv(paste(SuccessGridsDirectory,TargetAllFileNamestub,"_by
 GoalGroupsAll$goalgroup.cat <- paste0('$',GoalGroupsAll$MinGoal,"-$",GoalGroupsAll$MaxGoal)
 GoalGroupsFiltered$goalgroup.cat <- paste0('$',GoalGroupsFiltered$MinGoal,"-$",TechCategoryGroupsFiltered$MaxGoal)
 
+GoalSuccessFiltered <- read.csv(paste(SuccessGridsDirectory,paste(TargetFileNamestub,"_by_goal_success.csv", sep="" ,collapse=NULL), sep="" ,collapse=NULL)) 
+png(paste(ChartsDirectory,"LineGraphFilteredSuccessVsGoal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
+ggplot(GoalSuccessFiltered, aes(x=goal, y=PercentSuccess)) +
+geom_point() +
+geom_smooth(se=F) +
+scale_x_discrete(name="Goal") +
+scale_y_continuous(name="Percent Success") +
+ggtitle("Success By Goal - Filtered")+ theme(plot.title = element_text(hjust = 0.5))
+dev.off()
+
 png(paste(ChartsDirectory,"LineGraphFilteredSuccessVsGoalGroup.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(GoalGroupsFiltered, aes(x=goalgroup, y=PercentSuccess)) +
 geom_point() +
-geom_smooth() +
+geom_smooth(se=F) +
 scale_x_discrete(name="Goal Amount by Goal Group", limits=GoalGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Percent Success") +
 ggtitle("Success By Goal Group - Filtered")+ theme(plot.title = element_text(hjust = 0.5))
@@ -391,7 +463,7 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphFilteredPledgedVsGoalGroup.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(GoalGroupsFiltered, aes(x=goalgroup, y=MeanPledged)) + 
 geom_point() +
-geom_smooth(color=PledgedColor, size=2) + 
+geom_smooth(color=PledgedColor, size=2, se=F) + 
 scale_x_discrete(name="Goal Amount by Goal Group", limits=GoalGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Mean Pledged Amount") + 
 ggtitle("Mean Pledge By Goal Group - Filtered")+ theme(plot.title = element_text(hjust = 0.5))
@@ -400,7 +472,7 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphFilteredMedianPledgedVsGoalGroup.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(GoalGroupsFiltered, aes(x=goalgroup, y=MedianPledged)) + 
 geom_point() +
-geom_smooth(color=PledgedColor, size=2) + 
+geom_smooth(color=PledgedColor, size=2,se=F ) + 
 scale_x_discrete(name="Goal Amount by Goal Group", limits=GoalGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Median Pledged Amount") + 
 ggtitle("Median Pledged By Goal Group - Filtered")+ theme(plot.title = element_text(hjust = 0.5))
@@ -410,18 +482,18 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphAllSuccessVsGoalAmount.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(GoalGroupsAll, aes(x=goalgroup, y=PercentSuccess)) +
 geom_point() +
-geom_smooth(color=PercentColor, size=2) + 
+geom_smooth(color=PercentColor, size=2, se=F) + 
 scale_x_discrete(name="Goal Amount", limits=GoalGroupsAll$goalgroup.cat) +
 scale_y_continuous(name="Percent Success") +
 ggtitle("Success By Goal Amount - All") + theme(plot.title = element_text(hjust = 0.5))
-#ggplot(GoalGroupsAll, aes(x=goalgroup, y=PercentSuccess)) + geom_point() +geom_smooth() + scale_x_discrete(name="Goal Amount", limits=lgnd) + scale_y_continuous(name="Percent Success") + ggtitle("Success By Goal Amount - All")
+#ggplot(GoalGroupsAll, aes(x=goalgroup, y=PercentSuccess)) + geom_point() +geom_smooth(se=F) + scale_x_discrete(name="Goal Amount", limits=lgnd) + scale_y_continuous(name="Percent Success") + ggtitle("Success By Goal Amount - All")
 dev.off()
 
 # CHARTS & TESTS FOR GOAL
 png(paste(ChartsDirectory,"LineGraphFilteredSuccessVsGoal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(GoalGroupsFiltered, aes(x=goalgroup, y=PercentSuccess)) +
 geom_point() +
-geom_smooth() +
+geom_smooth(se=F) +
 scale_x_discrete(name="Goal Amount by Goal Group", limits=GoalGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Percent Success") +
 ggtitle("Success By Goal Group - Filtered")+ theme(plot.title = element_text(hjust = 0.5))
@@ -492,7 +564,7 @@ require(scales)
 coeff <- .0003
 
 ggplot(GoalGroupsFiltered, aes(x=goalgroup, y=MeanPledged))   +
-geom_smooth(color=PledgedColor, size=2) + 
+geom_smooth(color=PledgedColor, size=2, se=F) + 
 scale_x_discrete(name="Goal Amount", limits=GoalGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Mean Pledged Amount", sec.axis = sec_axis( trans=~.*coeff, name="Chance of Success")) +
 geom_smooth(aes(y=PercentSuccess / coeff), size=2)+  
@@ -506,7 +578,7 @@ require(scales)
 coeff <- .0003
 
 ggplot(TechCategoryGroupsFiltered, aes(x=goalgroup, y=MeanPledged))   +
-geom_smooth(color=PledgedColor, size=2) + 
+geom_smooth(color=PledgedColor, size=2, se=F) + 
 scale_x_discrete(name="Goal Amount", limits=TechCategoryGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Mean Pledged Amount", sec.axis = sec_axis( trans=~.*coeff, name="Chance of Success")) +
 geom_smooth(aes(y=PercentSuccess / coeff), size=2)+  
@@ -523,7 +595,7 @@ YEARS = min(YearGroupsAll['year']):max(YearGroupsAll['year'])
 png(paste(ChartsDirectory,"LineGraphAllSuccessbyyear.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(YearGroupsAll, aes(x=year, y=PercentSuccess)) +
 geom_point() +
-geom_smooth(color=PercentColor, size=2) + 
+geom_smooth(color=PercentColor, size=2, se=F) + 
 scale_y_continuous(name="Percent Success") +
 scale_x_continuous("Year" , labels = as.character(YEARS), breaks = YEARS ) +
 ggtitle("Success By Year - All") + theme(plot.title = element_text(hjust = 0.5))
@@ -532,7 +604,7 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphAllPledgedByYear.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(YearGroupsAll, aes(x=year, y=MeanPledged)) +
 geom_point() +
-geom_smooth(color=PledgedColor, size=2) + 
+geom_smooth(color=PledgedColor, size=2, se=F) + 
 scale_y_continuous(name="Mean Pledged $") +
 scale_x_continuous("Year" , labels = as.character(YEARS), breaks = YEARS ) +
 ggtitle("Mean Pledge By Year - All") + theme(plot.title = element_text(hjust = 0.5))
@@ -541,7 +613,7 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphAllMedianPledgedByYear.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(YearGroupsAll, aes(x=year, y=MedianPledged)) +
 geom_point() +
-geom_smooth(color=PledgedColor, size=2) + 
+geom_smooth(color=PledgedColor, size=2, se=F) + 
 scale_y_continuous(name="Median Pledged $") +
 scale_x_continuous("Year" , labels = as.character(YEARS), breaks = YEARS ) +
 ggtitle("Median Pledge By Year - All") + theme(plot.title = element_text(hjust = 0.5))
@@ -550,12 +622,20 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphAllGoalByYear.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(YearGroupsAll, aes(x=year, y=MeanGoal)) +
 geom_point() +
-geom_smooth(color=PledgedColor, size=2) + 
+geom_smooth(color=PledgedColor, size=2, se=F) + 
 scale_y_continuous(name="Mean Goal $") +
 scale_x_continuous("Year" , labels = as.character(YEARS), breaks = YEARS ) +
 ggtitle("Mean Goal By Year - All") + theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
+png(paste(ChartsDirectory,"BarChartStackedAllSuccessByYear.png", sep="" ,collapse=NULL), width = 700, height = 500)
+ggplot(ks.projall, aes(x = launched_year, fill = projectsuccess)) +
+  geom_bar() +
+  theme(legend.position = "bottom") +
+  ylab("Number of projects") + xlab("Year launched") +
+  ggtitle("Project Success by Year")+
+  theme(plot.title = element_text(hjust = 0.5))
+dev.off()  
 
 # DESIGN CATEGORY
 
@@ -565,7 +645,7 @@ DesignCategoryGroupsFiltered$goalgroup.cat <- paste0('$',DesignCategoryGroupsFil
 png(paste(ChartsDirectory,"LineGraphDesignFilteredPledgeVsGoal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(DesignCategoryGroupsFiltered, aes(x=goalgroup, y=MeanPledged)) +
 geom_point() +
-geom_smooth(color=PledgedColor, size=2) +
+geom_smooth(color=PledgedColor, size=2, se=F) +
 scale_x_discrete(name="Goal Amount", limits=DesignCategoryGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Mean Pledge") +
 ggtitle("Mean Pledge by Goal Amount - Filtered - Design Category")+ theme(plot.title = element_text(hjust = 0.5))
@@ -574,7 +654,7 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphDesignFilteredSuccessVsGoal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(DesignCategoryGroupsFiltered, aes(x=goalgroup, y=PercentSuccess)) +
 geom_point() +
-geom_smooth(color=PercentColor, size=2) +
+geom_smooth(color=PercentColor, size=2, se=F) +
 scale_x_discrete(name="Goal Amount", limits=DesignCategoryGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Success") +
 ggtitle("Success by Goal Amount - Filtered - Design Category")+ theme(plot.title = element_text(hjust = 0.5))
@@ -583,7 +663,7 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphDesignFilteredPledgeVsGoal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(TechCategoryGroupsFiltered, aes(x=goalgroup, y=MeanPledged)) +
 geom_point() +
-geom_smooth(color=PledgedColor, size=2) +
+geom_smooth(color=PledgedColor, size=2, se=F) +
 scale_x_discrete(name="Goal Amount", limits=GoalGroupsFiltered$goalgroup.cat) +
 scale_y_continuous(name="Mean Pledge") +
 ggtitle("Mean Pledge by Goal Amount - Filtered - Technology Category")+ theme(plot.title = element_text(hjust = 0.5))
@@ -745,12 +825,131 @@ dev.off()
 png(paste(ChartsDirectory,"LineGraphFilteredSuccessVsDurationDays.png", sep="" ,collapse=NULL), width = 1500, height = 700)
 ggplot(DurationdaysFiltered, aes(x=durationdays, y=PercentSuccess)) +
 geom_point() +
-geom_smooth() +
+geom_smooth(se=F) +
 scale_x_discrete(name="Duration (days)", limits=DurationdaysFiltered$durationdays) +
 scale_y_continuous(name="Percent Success") +
 ggtitle("Success By Duration (days) - Filtered")+ theme(plot.title = element_text(hjust = 0.5))
 dev.off()
 
+ddres <- chisq.test(table(FilteredProjects$durationdays, FilteredProjects$projectsuccess))
+chisqcap <- capture.output(chires)
+writeLines(chisqcap, con=file(paste(ResultsDirectory,"DurationDaysSuccessFilteredChiSquare.txt", sep="" ,collapse=NULL)))
+closeAllConnections()
+
+FilteredProjects5000 <-  subset(FilteredProjects, goal == 5000)
+png(paste(ChartsDirectory,"BarGraphFilteredSuccessVsDurationDays5000goal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
+ggplot(FilteredProjects5000, aes(x = durationdays, fill = projectsuccess)) +
+  geom_bar() +
+  coord_flip() +
+  theme(legend.position = "bottom") +
+  ylab("Number of projects") + xlab("PRoject Duration (days)") +
+  ggtitle("Duration and Success of $5,000.00 Projects")+ theme(plot.title = element_text(hjust = 0.5))
+  dev.off()
+
+nrow(FilteredProjects5000)
+FilteredProjects5000.Success <- subset(FilteredProjects5000, projectsuccess == "Success")
+nrow(FilteredProjects5000.Success)/nrow(FilteredProjects5000)
+
+FilteredProjects.30 <- subset(FilteredProjects5000, durationdays < 31)
+FilteredProjects.30.Success <- subset(FilteredProjects.30, projectsuccess == "Success")
+nrow(FilteredProjects.30)
+nrow(FilteredProjects.30.Success)/nrow(FilteredProjects.30)
+
+FilteredProjects5000.60 <- subset(FilteredProjects5000, durationdays >31 )
+FilteredProjects5000.60.Success <- subset(FilteredProjects5000.60, projectsuccess == "Success")
+nrow(FilteredProjects5000.60)
+nrow(FilteredProjects5000.60.Success)/nrow(FilteredProjects5000.60)
+
+
+FilteredProjects.30 <- subset(FilteredProjects, durationdays == 30)
+FilteredProjects.30.Success <- subset(FilteredProjects.30, projectsuccess == "Success")
+nrow(FilteredProjects.30)
+nrow(FilteredProjects.30.Success)/nrow(FilteredProjects.30)
+
+FilteredProjects.30 <- subset(FilteredProjects, durationdays < 31)
+FilteredProjects.30.Success <- subset(FilteredProjects.30, projectsuccess == "Success")
+nrow(FilteredProjects.30)
+nrow(FilteredProjects.30.Success)/nrow(FilteredProjects.30)
+
+FilteredProjects5000.60 <- subset(FilteredProjects, durationdays >31 )
+FilteredProjects5000.60.Success <- subset(FilteredProjects5000.60, projectsuccess == "Success")
+nrow(FilteredProjects5000.60.Success)/nrow(FilteredProjects5000.60)
+
+
+FilteredProjects.30 <- subset(FilteredProjects, durationdays < 31)
+FilteredProjects.30.Success <- subset(FilteredProjects.30, projectsuccess == "Success")
+nrow(FilteredProjects.30)
+nrow(FilteredProjects.30.Success)/nrow(FilteredProjects.30)
+
+FilteredProjects.60 <- subset(FilteredProjects, durationdays > 31)
+FilteredProjects.60.Success <- subset(FilteredProjects.60, projectsuccess == "Success")
+nrow(FilteredProjects.60)
+nrow(FilteredProjects.60.Success)/nrow(FilteredProjects.60)
+
+
+
+FilteredProjects10000 <-  subset(FilteredProjects, goal == 10000)
+png(paste(ChartsDirectory,"BarGraphFilteredSuccessVsDurationDays10000goal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
+ggplot(FilteredProjects10000, aes(x = durationdays, fill = projectsuccess)) +
+  geom_bar() +
+  coord_flip() +
+  theme(legend.position = "bottom") +
+  ylab("Number of projects") + xlab("Project Duration (days)") +
+  ggtitle("Duration and Success of $10,000.00 Projects")+ theme(plot.title = element_text(hjust = 0.5))
+  dev.off()
+
+FilteredProjects10000.Success <- subset(FilteredProjects10000, projectsuccess == "Success")
+row(FilteredProjects10000)
+nrow(FilteredProjects10000.Success)/nrow(FilteredProjects10000)
+
+FilteredProjects10000.30 <- subset(FilteredProjects, durationdays < 31)
+FilteredProjects10000.30.Success <- subset(FilteredProjects10000.30, projectsuccess == "Success")
+nrow(FilteredProjects10000.30.Success)/nrow(FilteredProjects10000.30)
+
+FilteredProjects10000.60 <- subset(FilteredProjects, durationdays >31 )
+FilteredProjects10000.60.Success <- subset(FilteredProjects10000.60, projectsuccess == "Success")
+nrow(FilteredProjects10000.60.Success)/nrow(FilteredProjects10000.60)
+
+FilteredProjects5000.30 <- subset(FilteredProjects, durationdays < 31)
+FilteredProjects5000.30.Success <- subset(FilteredProjects5000.30, projectsuccess == "Success")
+nrow(FilteredProjects5000.30.Success)/nrow(FilteredProjects5000.30)
+
+FilteredProjects5000.60 <- subset(FilteredProjects, durationdays >31 )
+FilteredProjects5000.60.Success <- subset(FilteredProjects5000.60, projectsuccess == "Success")
+nrow(FilteredProjects5000.60.Success)/nrow(FilteredProjects5000.60)
+
+
+
+FilteredProjects10000 <-  subset(FilteredProjects, goal == 10000)
+png(paste(ChartsDirectory,"BarGraphFilteredSuccessVsDurationDays10000goal.png", sep="" ,collapse=NULL), width = 1500, height = 700)
+ggplot(FilteredProjects10000, aes(x = durationdays, fill = projectsuccess)) +
+  geom_bar() +
+  coord_flip() +
+  theme(legend.position = "bottom") +
+  ylab("Number of projects") + xlab("Project Duration (days)") +
+  ggtitle("Duration and Success of $10,000.00 Projects")+ theme(plot.title = element_text(hjust = 0.5))
+  dev.off()
+
+FilteredProjects20000 <- subset(FilteredProjects, goal == 20000)
+FilteredProjects20000.Success <- subset(FilteredProjects20000, projectsuccess == "Success")
+row(FilteredProjects20000)
+nrow(FilteredProjects20000.Success)/nrow(FilteredProjects20000)
+
+FilteredProjects20000.30 <- subset(FilteredProjects20000, durationdays < 31)
+FilteredProjects20000.30.Success <- subset(FilteredProjects20000.30, projectsuccess == "Success")
+nrow(FilteredProjects20000.30.Success)/nrow(FilteredProjects20000.30)
+
+FilteredProjects20000.60 <- subset(FilteredProjects20000, durationdays >31 )
+FilteredProjects20000.60.Success <- subset(FilteredProjects20000.60, projectsuccess == "Success")
+nrow(FilteredProjects20000.60.Success)/nrow(FilteredProjects20000.60)
+
+FilteredProjects5000.30 <- subset(FilteredProjects, durationdays < 31)
+FilteredProjects5000.30.Success <- subset(FilteredProjects5000.30, projectsuccess == "Success")
+nrow(FilteredProjects5000.30.Success)/nrow(FilteredProjects5000.30)
+
+FilteredProjects5000.60 <- subset(FilteredProjects, durationdays >31 )
+FilteredProjects5000.60.Success <- subset(FilteredProjects5000.60, projectsuccess == "Success")
+nrow(FilteredProjects5000.60.Success)/nrow(FilteredProjects5000.60)
 
 
 
@@ -766,6 +965,37 @@ closeAllConnections()
 # RANDOM FOREST
 
 
+	
+
+fmla = projectsuccess ~ category + staff_pick + deadline_year + goal +
+    deadline_month + deadline_day + durationdays + country +
+    goalgroup + launched_year + launched_month + launched_day + SubMatch
+ks.proj  <- FilteredProjects
+ks.proj$tmp.var <- 1
+num.proj <- aggregate(tmp.var ~ country, ks.proj, sum)
+num.proj$country.reduced <- ifelse(num.proj$tmp.var < 100, "<100", as.character(num.proj$country))
+colnames(num.proj) <- c("country", "num.projects", "country.reduced")
+ks.proj <- ks.proj[,1:35]
+ks.proj <- merge(ks.proj, num.proj, by="country")
+ks.proj$country.reduced <- as.factor(ks.proj$country.reduced)
+ks.proj$SubMatch <-  ifelse(as.character(ks.proj$category)==as.character(ks.proj$subcategory), "Matched", "NoMatch") 	
+ks.proj$country.reduced <- relevel(ks.proj$country.reduced, ref="US")
+ks.proj$language <- relevel(ks.proj$language, ref="en")
+ks.proj$category <- relevel(ks.proj$category, ref="ART")	
+# create Training - Test and Validation set (60 - 20 - 20%)
+set.seed(12420360)
+spec = c(train = .6, test = .2, validate = .2)
+g = sample(cut(seq(nrow(ks.proj)), nrow(ks.proj)*cumsum(c(0,spec)), labels = names(spec)))
+
+res = split(FilteredProjects, g)
+train.data <- res$train
+test.data <- res$test
+validation.data <- res$validate
+rf.model2 <- randomForest(fmla, data = train.data, importance = TRUE, ntree=500)	
+	
+	
+	
+	
 FilteredProjectsSuccessRF <-	subset(FilteredProjects, select = c("projectsuccess","category", "goal", "staff_pick", "language"))
 sample = sample.split(FilteredProjectsSuccessRF$projectsuccess, SplitRatio = .75)
 train = subset(FilteredProjectsSuccessRF, sample == TRUE)
@@ -932,31 +1162,91 @@ memory.limit(860000000)
 
 nullmodel <- glm(projectsuccess~1, data = train.data, family = "binomial")
 
-fullmodel <- glm(projectsuccess~category+	goal +	staff_pick+	deadline_year +	deadline_month + durationdays +	
-country.reduced + language+	launched_year +	launched_month + launched_day
+fullmodel <- glm(projectsuccess~category+	goal  + num.projects +
+staff_pick+	deadline_year +	deadline_month +	deadline_day + durationdays +	
+country.reduced +	language+	 launched_year +	launched_month + launched_day + SubMatch
 , data = train.data, family = binomial())
+
+summary(fullmodel)
 
 write.csv(summary(fullmodel)['coefficients'],file=paste(ResultsDirectory,"FullLogisticRegressionFiltered.csv", sep="" ,collapse=NULL))
 summary(fullmodel)
 
+# Model selection
+
+step.model1 <- MASS::stepAIC(fullmodel, direction = "both", trace = FALSE)
+
+
 # Reduced model, using projectsuccess
 
-tree.model3 <- rpart(projectsuccess~category + backers_count + staff_pick + 
-    deadline_year + deadline_month + durationdays + country.reduced + 
-    goalgroup + pledgedgroup + launched_year
-, data = train.data, method = "class")
+ProspectProjects <- read.csv(paste(SourceDirectory,"kickstarter_prospect.csv", sep="" ,collapse=NULL), stringsAsFactors = T)
 
-tree.model3 <- rpart(projectsuccess~category + staff_pick + 
-     durationdays + country.reduced + goalgroup + SubMatch
-, data = train.data, method = "class")
+ProspectProjects$ID <- as.character(rownames(ProspectProjects))
+ProspectProjects$name <- as.character(ProspectProjects$name)
+ProspectProjects$deadline <- as.Date(ProspectProjects$deadline)
+ProspectProjects$launched <- as.Date(ProspectProjects$launched_at)
 
-rpart.plot(tree.model3)
-rpartcap <- capture.output(summary(tree.model3))
-writeLines(rpartcap, con=file(paste(ResultsDirectory,"SuccessVsAllregression.txt", sep="" ,collapse=NULL)))
-closeAllConnections()
-summary(tree.model3)
+# reformat project success
+ProspectProjects$projectsuccess <- as.character(ProspectProjects$projectsuccess )
+ProspectProjects$projectsuccess <- as.factor(ProspectProjects$projectsuccess )
+
+ProspectProjects <- ProspectProjects %>% 
+  separate(col = "deadline", into = c("deadline_year", "deadline_month", "deadline_day"), sep = "-") %>%
+  separate(col = "launched", into = c("launched_year", "launched_month", "launched_day"), sep = "-")
+
+ProspectProjects$launched_day <- as.numeric(ProspectProjects$launched_day)
+ProspectProjects$deadline_day <- as.numeric(ProspectProjects$deadline_day)
 
 
+ProspectProjects$tmp.var <- 1
+num.proj <- aggregate(tmp.var ~ country, ProspectProjects, sum)
+num.proj$country.reduced <- ifelse(num.proj$tmp.var < 100, "<100", as.character(num.proj$country))
+colnames(num.proj) <- c("country", "num.projects", "country.reduced")
+ProspectProjects <- ProspectProjects[,1:35]
+ProspectProjects <- merge(ProspectProjects, num.proj, by="country")
+ProspectProjects$country.reduced <- as.factor(ProspectProjects$country.reduced)
+
+ProspectProjects$SubMatch <-  ifelse(as.character(ProspectProjects$category)==as.character(ProspectProjects$subcategory), "Matched", "NoMatch") 
+
+
+rf.pred.val <- predict(rf.model2, ProspectProjects, type = "class")
+
+# LOG SCALE GRAPHS 
+
+goal.log.mean = aggregate(log(goal) ~ projectsuccess, ks.proj, mean)
+colnames(goal.log.mean) <- c("projectsuccess", "log.mean")
+goal.log.mean$exp.mean <- exp(goal.log.mean$log.mean)
+goal.log.mean$label <- paste0("$", round(goal.log.mean$exp.mean,0))
+png(paste(ChartsDirectory,"skewedbarlogTransformation.png", sep="" ,collapse=NULL), width = 1500, height = 700)
+ggplot(ks.proj, aes(x = projectsuccess, y = log(goal), fill = projectsuccess)) +
+  stat_boxplot(outlier.shape = 1) +
+  geom_text(data=goal.log.mean, aes(label=label, x=projectsuccess, y = log.mean),
+            size=6, nudge_x=.45) +
+  theme(legend.position = "bottom") +
+  ylab("Goal in USD (log-transformed)") + xlab("") +
+  scale_y_continuous(labels = scales::comma) +
+  coord_flip() +
+  ggtitle("Goal of the KS projects (Log)")+
+  labs(caption="The mean of the log transformed value is represented in the anti-log scale, which is the geometric mean.")
+dev.off()
+
+ks.proj$pledged <-  ifelse(as.character(ks.proj$pledged)==as.character("0"), ".000001", ks.proj$pledged) 
+pledged.log.mean = aggregate(log(pledged) ~ projectsuccess, ks.proj, mean)
+colnames(pledged.log.mean) <- c("projectsuccess", "log.mean")
+pledged.log.mean$exp.mean <- exp(pledged.log.mean$log.mean)
+pledged.log.mean$label <- paste0("$", round(pledged.log.mean$exp.mean,0))
+png(paste(ChartsDirectory,"skewedbarlogpledgedTransformation.png", sep="" ,collapse=NULL), width = 1500, height = 700)
+ggplot(ks.proj, aes(x = projectsuccess, y = log(pledged), fill = projectsuccess)) +
+  stat_boxplot(outlier.shape = 1) +
+  geom_text(data=pledged.log.mean, aes(label=label, x=projectsuccess, y = log.mean),
+            size=6, nudge_x=.45) +
+  theme(legend.position = "bottom") +
+  ylab("Pledged in USD (log-transformed)") + xlab("") +
+  scale_y_continuous(labels = scales::comma) +
+  coord_flip() +
+  ggtitle("Goal of the KS projects (Log)")+
+  labs(caption="The mean of the log transformed value is represented in the anti-log scale, which is the geometric mean.")
+dev.off()
 
 
 
